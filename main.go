@@ -2,41 +2,39 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 )
 
 type Item struct {
-	Id   int    `json:"id"`
+	gorm.Model
 	Name string `json:"name"`
 	Qty  int    `json:"qty"`
 }
 
-var items = []Item{
-	{
-		Id:   1,
-		Name: "Shampoo",
-		Qty:  15,
-	},
-	{
-		Id:   2,
-		Name: "Snack",
-		Qty:  150,
-	},
-	{
-		Id:   3,
-		Name: "Cigaret",
-		Qty:  90,
-	},
+var DB *gorm.DB
+
+func init() {
+	dsn := "host=localhost user=postgres password=nopalgemay32 dbname=learn_gorm port=5431 sslmode=disable TimeZone=Asia/Jakarta"
+	var err error
+	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 }
 
 func main() {
+	DB.AutoMigrate(&Item{})
+
 	app := fiber.New()
 
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.SendString("Hello world!")
+		return c.SendString("Hello world 2!")
 	})
 
 	app.Post("/items", func(c *fiber.Ctx) error {
@@ -50,7 +48,7 @@ func main() {
 			})
 		}
 
-		items = append(items, item)
+		DB.Create(&item)
 
 		return c.JSON(fiber.Map{
 			"success": true,
@@ -61,24 +59,26 @@ func main() {
 
 	app.Get("/items", func(c *fiber.Ctx) error {
 		name := c.Query("name")
+		items := []Item{}
 
 		if name != "" {
-			for _, item := range items {
-				if item.Name == name {
-					return c.JSON(fiber.Map{
-						"success": true,
-						"message": "",
-						"data":    []Item{item},
-					})
-				}
+			DB.Where("name LIKE ?", fmt.Sprintf("%%%s%%", name)).Find(&items)
+			if len(items) > 0 {
+				return c.JSON(fiber.Map{
+					"success": true,
+					"message": "",
+					"data":    items,
+				})
 			}
 
 			return c.JSON(fiber.Map{
 				"success": true,
 				"message": fmt.Sprintf("Items with name %s not found", name),
-				"data":    []Item{},
+				"data":    items,
 			})
 		}
+
+		DB.Find(&items)
 
 		return c.JSON(fiber.Map{
 			"success": true,
@@ -88,6 +88,7 @@ func main() {
 	})
 
 	app.Get("/items/:id", func(c *fiber.Ctx) error {
+		item := Item{}
 		id, err := strconv.Atoi(c.Params("id"))
 		if err != nil {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{
@@ -97,14 +98,13 @@ func main() {
 			})
 		}
 
-		for _, item := range items {
-			if item.Id == id {
-				return c.JSON(fiber.Map{
-					"success": true,
-					"message": "",
-					"data":    item,
-				})
-			}
+		result := DB.First(&item, id)
+		if result.RowsAffected != 0 {
+			return c.JSON(fiber.Map{
+				"success": true,
+				"message": "",
+				"data":    item,
+			})
 		}
 
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{
@@ -134,6 +134,8 @@ func main() {
 			})
 		}
 
+		item.ID = uint(id)
+
 		if item.Name == "" {
 			return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 				"success": false,
@@ -142,16 +144,13 @@ func main() {
 			})
 		}
 
-		for i := 0; i < len(items); i++ {
-			if items[i].Id == id {
-				items[i].Name = item.Name
-
-				return c.JSON(fiber.Map{
-					"success": true,
-					"message": "",
-					"data":    items[i],
-				})
-			}
+		result := DB.Save(&item)
+		if result.RowsAffected != 0 {
+			return c.JSON(fiber.Map{
+				"success": true,
+				"message": "",
+				"data":    item,
+			})
 		}
 
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{
@@ -171,15 +170,13 @@ func main() {
 			})
 		}
 
-		for i, item := range items {
-			if item.Id == id {
-				items = append(items[:i], items[i+1:]...)
-				return c.JSON(fiber.Map{
-					"success": true,
-					"message": "",
-					"data":    items,
-				})
-			}
+		result := DB.Delete(&Item{}, id)
+		if result.RowsAffected != 0 {
+			return c.JSON(fiber.Map{
+				"success": true,
+				"message": "",
+				"data":    nil,
+			})
 		}
 
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{
