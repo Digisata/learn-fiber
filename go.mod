@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/gofiber/fiber/v2 v2.42.0
+	github.com/golang-jwt/jwt/v5 v5.0.0-rc.1
 	gorm.io/driver/postgres v1.4.8
 	gorm.io/gorm v1.24.6
 )
